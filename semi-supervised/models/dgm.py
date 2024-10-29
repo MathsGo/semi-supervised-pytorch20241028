@@ -23,6 +23,21 @@ class Classifier(nn.Module):
         x = F.softmax(self.logits(x), dim=-1)
         return x
 
+class Regressor(nn.Module):
+    def __init__(self, dims):
+        """
+        Single hidden layer regressor.
+        """
+        super(Regressor, self).__init__()
+        [x_dim, h_dim, y_dim] = dims
+        self.dense = nn.Linear(x_dim, h_dim)
+        self.output = nn.Linear(h_dim, y_dim)  # 去掉 softmax，使其直接输出连续值
+
+    def forward(self, x):
+        x = F.relu(self.dense(x))  # 使用 ReLU 激活函数
+        x = self.output(x)          # 直接输出预测值
+        return x
+
 
 class DeepGenerativeModel(VariationalAutoencoder):
     def __init__(self, dims):
@@ -44,6 +59,7 @@ class DeepGenerativeModel(VariationalAutoencoder):
         self.encoder = Encoder([x_dim + self.y_dim, h_dim, z_dim])
         self.decoder = Decoder([z_dim + self.y_dim, list(reversed(h_dim)), x_dim])
         self.classifier = Classifier([x_dim, h_dim[0], self.y_dim])
+        self.regressor = Regressor([x_dim, h_dim[0], self.y_dim])
 
         for m in self.modules():
             if isinstance(m, nn.Linear):
@@ -53,18 +69,32 @@ class DeepGenerativeModel(VariationalAutoencoder):
 
     def forward(self, x, y):
         # Add label and data and generate latent variable
+        if x.size(0) != y.size(0):
+            y = y.t()
+        # print(x.shape, y.shape)
+        # print(x)
+        # print(y)
         z, z_mu, z_log_var = self.encoder(torch.cat([x, y], dim=1))
+        # z, z_mu, z_log_var = self.encoder(torch.cat([x, y.t()], dim=1))
 
         self.kl_divergence = self._kld(z, (z_mu, z_log_var))
 
         # Reconstruct data point from latent data and label
+        # print(z.shape, y.shape)
+        # print(z)
+        # print(y)
         x_mu = self.decoder(torch.cat([z, y], dim=1))
+        # x_mu = self.decoder(torch.cat([z, y.t()], dim=1))
 
         return x_mu
 
     def classify(self, x):
         logits = self.classifier(x)
         return logits
+    
+    def regress(self, x):
+        predictions = self.regressor(x)
+        return predictions
 
     def sample(self, z, y):
         """
@@ -74,6 +104,9 @@ class DeepGenerativeModel(VariationalAutoencoder):
         :return: x
         """
         y = y.float()
+        # print(z.shape, y.shape)
+        # print(z)
+        # print(y)
         x = self.decoder(torch.cat([z, y], dim=1))
         return x
 
