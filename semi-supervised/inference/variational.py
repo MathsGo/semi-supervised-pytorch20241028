@@ -1,11 +1,13 @@
 from itertools import repeat
 
+import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
 
 from utils import log_sum_exp, enumerate_discrete
 from .distributions import log_standard_categorical
+from .distributions import log_standard_gaussian
 
 class ImportanceWeightedSampler(object):
     """
@@ -55,7 +57,7 @@ class SVI(nn.Module):
     Stochastic variational inference (SVI).
     """
     base_sampler = ImportanceWeightedSampler(mc=1, iw=1)
-    def __init__(self, model, likelihood=F.binary_cross_entropy, beta=repeat(1), sampler=base_sampler):
+    def __init__(self, model, likelihood=F.mse_loss, beta=repeat(1), sampler=base_sampler):
         """
         Initialises a new SVI optimizer for semi-
         supervised learning.
@@ -88,25 +90,25 @@ class SVI(nn.Module):
         reconstruction = self.model(xs, ys)
 
         # p(x|y,z)
-        likelihood = -self.likelihood(reconstruction, xs)
+        likelihood = -self.likelihood(reconstruction, xs) #? +/- symbol at the begining?
 
         # p(y)
-        prior = -log_standard_categorical(ys)
+        prior = -log_standard_gaussian(ys)
 
         # Equivalent to -L(x, y)
         elbo = likelihood + prior - next(self.beta) * self.model.kl_divergence
-        L = self.sampler(elbo)
+        L = self.sampler(elbo) #?should be -elbo?
 
         if is_labelled:
             return torch.mean(L)
 
-        logits = self.model.classify(x)
+        pred_y, pred_y_mu, pred_y_log_var = self.model.regress(x)
 
-        L = L.view_as(logits.t()).t()
+        L = L.view_as(pred_y.t()).t()
 
         # Calculate entropy H(q(y|x)) and sum over all labels
-        H = -torch.sum(torch.mul(logits, torch.log(logits + 1e-8)), dim=-1)
-        L = torch.sum(torch.mul(logits, L), dim=-1)
+        H = -torch.sum(0.5 + 0.5 * torch.log(2 * np.pi * torch.exp(pred_y_log_var)))
+        L = torch.sum(torch.mul(pred_y, L), dim=-1) # ! Need to be modified!
 
         # Equivalent to -U(x)
         U = L + H

@@ -59,7 +59,7 @@ class DeepGenerativeModel(VariationalAutoencoder):
         self.encoder = Encoder([x_dim + self.y_dim, h_dim, z_dim])
         self.decoder = Decoder([z_dim + self.y_dim, list(reversed(h_dim)), x_dim])
         self.classifier = Classifier([x_dim, h_dim[0], self.y_dim])
-        self.regressor = Regressor([x_dim, h_dim[0], self.y_dim])
+        self.regressor = Encoder([x_dim, h_dim, self.y_dim])
 
         for m in self.modules():
             if isinstance(m, nn.Linear):
@@ -75,6 +75,7 @@ class DeepGenerativeModel(VariationalAutoencoder):
         # print(x)
         # print(y)
         z, z_mu, z_log_var = self.encoder(torch.cat([x, y], dim=1))
+        # print(z.sum(), z_mu.sum(), z_log_var.sum())
         # z, z_mu, z_log_var = self.encoder(torch.cat([x, y.t()], dim=1))
 
         self.kl_divergence = self._kld(z, (z_mu, z_log_var))
@@ -93,8 +94,8 @@ class DeepGenerativeModel(VariationalAutoencoder):
         return logits
     
     def regress(self, x):
-        predictions = self.regressor(x)
-        return predictions
+        pred_y, y_mu, y_log_var = self.regressor(x)
+        return pred_y, y_mu, y_log_var
 
     def sample(self, z, y):
         """
