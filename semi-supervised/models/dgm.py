@@ -31,11 +31,11 @@ class Regressor(nn.Module):
         super(Regressor, self).__init__()
         [x_dim, h_dim, y_dim] = dims
         self.dense = nn.Linear(x_dim, h_dim)
-        self.output = nn.Linear(h_dim, y_dim)  # 去掉 softmax，使其直接输出连续值
+        self.output = nn.Linear(h_dim, y_dim)  
 
     def forward(self, x):
-        x = F.relu(self.dense(x))  # 使用 ReLU 激活函数
-        x = self.output(x)          # 直接输出预测值
+        x = F.relu(self.dense(x))  
+        x = self.output(x)       
         return x
 
 
@@ -59,7 +59,8 @@ class DeepGenerativeModel(VariationalAutoencoder):
         self.encoder = Encoder([x_dim + self.y_dim, h_dim, z_dim])
         self.decoder = Decoder([z_dim + self.y_dim, list(reversed(h_dim)), x_dim])
         self.classifier = Classifier([x_dim, h_dim[0], self.y_dim])
-        self.regressor = Encoder([x_dim, h_dim, self.y_dim])
+        self.regressor = Encoder([x_dim, h_dim, self.y_dim]) # variational regressor
+        # self.regressor = Regressor([x_dim, h_dim[0], self.y_dim]) # fixed regressor
 
         for m in self.modules():
             if isinstance(m, nn.Linear):
@@ -94,8 +95,8 @@ class DeepGenerativeModel(VariationalAutoencoder):
         return logits
     
     def regress(self, x):
-        pred_y, y_mu, y_log_var = self.regressor(x)
-        return pred_y, y_mu, y_log_var
+        pred_y = self.regressor(x)
+        return pred_y
 
     def sample(self, z, y):
         """
