@@ -27,6 +27,32 @@ class Perceptron(nn.Module):
 
         return x
 
+class FullyConnectedResNet(nn.Module):
+    def __init__(self, input_dim, hidden_dims, output_dim=None):
+        super(FullyConnectedResNet, self).__init__()
+        layers = []
+        prev_dim = input_dim
+        for dim in hidden_dims:
+            layers.append(nn.Linear(prev_dim, dim))
+            layers.append(nn.ReLU())
+            prev_dim = dim
+        self.fc_layers = nn.ModuleList(layers)
+        self.output_layer = nn.Linear(prev_dim, output_dim) if output_dim is not None else None
+        # If needed, adjust residual dimensions using a linear layer
+        self.residual_layer = nn.Linear(input_dim, prev_dim)  # To match dimensions if necessary
+
+
+    def forward(self, x):
+        residual = x
+        for layer in self.fc_layers:
+            x = layer(x)
+         # If dimensions of residual and x don't match, apply residual_layer
+        if residual.shape != x.shape:
+            residual = self.residual_layer(residual)
+        if self.output_layer:
+            x = self.output_layer(x + residual)
+        return x# Adding residual connection
+
 
 
 class Encoder(nn.Module):
@@ -46,16 +72,19 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
 
         [x_dim, h_dim, z_dim] = dims
-        neurons = [x_dim, *h_dim]
-        linear_layers = [nn.Linear(neurons[i-1], neurons[i]) for i in range(1, len(neurons))]
+        # neurons = [x_dim, *h_dim]
+        # linear_layers = [nn.Linear(neurons[i-1], neurons[i]) for i in range(1, len(neurons))]
 
-        self.hidden = nn.ModuleList(linear_layers)
+        # self.hidden = nn.ModuleList(linear_layers)
+        self.hidden = FullyConnectedResNet(x_dim, h_dim, h_dim[-1])
         self.sample = sample_layer(h_dim[-1], z_dim)
 
     def forward(self, x):
-        for layer in self.hidden:
-            x = F.relu(layer(x))
-        return self.sample(x)
+        h = self.hidden(x)
+        h = F.relu(h)
+        # for layer in self.hidden:
+        #     x = F.relu(layer(x))
+        return self.sample(h)
 
 
 class Decoder(nn.Module):
@@ -75,18 +104,21 @@ class Decoder(nn.Module):
 
         [z_dim, h_dim, x_dim] = dims
 
-        neurons = [z_dim, *h_dim]
-        linear_layers = [nn.Linear(neurons[i-1], neurons[i]) for i in range(1, len(neurons))]
-        self.hidden = nn.ModuleList(linear_layers)
+        # neurons = [z_dim, *h_dim]
+        # linear_layers = [nn.Linear(neurons[i-1], neurons[i]) for i in range(1, len(neurons))]
+        # self.hidden = nn.ModuleList(linear_layers)
+        self.hidden = FullyConnectedResNet(z_dim, h_dim, x_dim)
 
-        self.reconstruction = nn.Linear(h_dim[-1], x_dim)
+        # self.reconstruction = nn.Linear(h_dim[-1], x_dim)
 
-        self.output_activation = nn.Sigmoid()
+        # self.output_activation = nn.Sigmoid()
 
+    # def forward(self, x):
+    #     for layer in self.hidden:
+    #         x = F.relu(layer(x))
+    #     return self.reconstruction(x) #! Jing changed this self.output_activation(self.reconstruction(x))
     def forward(self, x):
-        for layer in self.hidden:
-            x = F.relu(layer(x))
-        return self.reconstruction(x) #! Jing changed this self.output_activation(self.reconstruction(x))
+        return self.hidden(x)
 
 
 class VariationalAutoencoder(nn.Module):
@@ -109,11 +141,11 @@ class VariationalAutoencoder(nn.Module):
         self.decoder = Decoder([z_dim, list(reversed(h_dim)), x_dim])
         self.kl_divergence = 0
 
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                init.xavier_normal(m.weight.data)
-                if m.bias is not None:
-                    m.bias.data.zero_()
+        # for m in self.modules():
+        #     if isinstance(m, nn.Linear):
+        #         init.xavier_normal(m.weight.data)
+        #         if m.bias is not None:
+        #             m.bias.data.zero_()
 
     def _kld(self, z, q_param, p_param=None):
         """

@@ -62,11 +62,11 @@ class DeepGenerativeModel(VariationalAutoencoder):
         self.regressor = Encoder([x_dim, h_dim, self.y_dim]) # variational regressor
         # self.regressor = Regressor([x_dim, h_dim[0], self.y_dim]) # fixed regressor
 
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                init.xavier_normal(m.weight.data)
-                if m.bias is not None:
-                    m.bias.data.zero_()
+        # for m in self.modules():
+        #     if isinstance(m, nn.Linear):
+        #         init.xavier_normal(m.weight.data)
+        #         if m.bias is not None:
+        #             m.bias.data.zero_()
 
     def forward(self, x, y):
         # Add label and data and generate latent variable
